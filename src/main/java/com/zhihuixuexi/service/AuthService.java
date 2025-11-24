@@ -28,11 +28,11 @@ public class AuthService {
 
     // 简单的内存缓存存储验证码（生产环境应该用Redis）
     private final java.util.Map<String, VerificationCodeData> verificationCodeCache = new java.util.concurrent.ConcurrentHashMap<>();
-    
+
     private static class VerificationCodeData {
         String code;
         LocalDateTime expiry;
-        
+
         VerificationCodeData(String code, LocalDateTime expiry) {
             this.code = code;
             this.expiry = expiry;
@@ -43,25 +43,54 @@ public class AuthService {
      * 发送验证码（不创建用户）
      */
     public String sendVerificationCode(String email) {
+        // 基础参数检查
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("邮箱不能为空");
+        }
+
+        // 邮箱格式校验（正则可根据需要强化）
+        if (!email.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+            throw new IllegalArgumentException("邮箱格式不正确");
+        }
+
         // 检查邮箱是否已注册
         if (userRepository.existsByEmail(email)) {
-            throw new RuntimeException("该邮箱已被注册");
+            throw new IllegalStateException("该邮箱已被注册");
         }
-        
+
         // 生成验证码
         String verificationCode = generateVerificationCode();
-        
-        // 存储到缓存中（24小时过期）
-        verificationCodeCache.put(email, new VerificationCodeData(
-            verificationCode,
-            LocalDateTime.now().plusHours(24)
-        ));
-        
-        // 发送验证邮件
-        emailService.sendVerificationEmail(email, "用户", verificationCode);
-        
+
+        // 封装数据
+        VerificationCodeData codeData = new VerificationCodeData(
+                verificationCode,
+                LocalDateTime.now().plusHours(24)
+        );
+
+        try {
+            // 写入缓存
+            verificationCodeCache.put(email, codeData);
+        } catch (Exception e) {
+            // 写入失败（缓存宕机/本地内存异常）
+            log.error("写入验证码缓存失败 email={} error={}", email, e.getMessage());
+            throw new RuntimeException("系统异常，请稍后重试");
+        }
+
+        try {
+            // 发送邮件
+            emailService.sendVerificationEmail(email, "用户", verificationCode);
+        } catch (Exception e) {
+            // 邮件发送失败，建议删除缓存避免失效验证码占用空间
+            log.error("发送验证码邮件失败 email={} error={}", email, e.getMessage());
+            verificationCodeCache.remove(email);
+            throw new RuntimeException("验证码发送失败，请稍后重试");
+        }
+
+        // 不应返回验证码（安全隐患）
+        // 原方法返回验证码，但为了兼容旧逻辑保留此行为
         return verificationCode;
     }
+
 
     /**
      * 用户注册（带验证码验证）
@@ -83,11 +112,11 @@ public class AuthService {
         if (codeData == null) {
             throw new RuntimeException("请先获取验证码");
         }
-        
+
         if (!codeData.code.equals(verificationCode)) {
             throw new RuntimeException("验证码错误");
         }
-        
+
         if (codeData.expiry.isBefore(LocalDateTime.now())) {
             verificationCodeCache.remove(request.getEmail());
             throw new RuntimeException("验证码已过期");
@@ -114,18 +143,18 @@ public class AuthService {
 
         // 生成JWT Token
         String token = jwtUtil.generateToken(
-            user.getUsername(),
-            user.getId(),
-            user.getRole().name()
+                user.getUsername(),
+                user.getId(),
+                user.getRole().name()
         );
 
         return new AuthResponse(
-            token,
-            user.getId(),
-            user.getUsername(),
-            user.getEmail(),
-            user.getRole(),
-            user.getEmailVerified()
+                token,
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRole(),
+                user.getEmailVerified()
         );
     }
 
@@ -135,7 +164,7 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         // 查找用户
         User user = userRepository.findByUsername(request.getUsername())
-            .orElseThrow(() -> new RuntimeException("用户名不存在"));
+                .orElseThrow(() -> new RuntimeException("用户名不存在"));
 
         // 验证密码
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
@@ -154,18 +183,18 @@ public class AuthService {
 
         // 生成JWT Token
         String token = jwtUtil.generateToken(
-            user.getUsername(),
-            user.getId(),
-            user.getRole().name()
+                user.getUsername(),
+                user.getId(),
+                user.getRole().name()
         );
 
         return new AuthResponse(
-            token,
-            user.getId(),
-            user.getUsername(),
-            user.getEmail(),
-            user.getRole(),
-            user.getEmailVerified()
+                token,
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRole(),
+                user.getEmailVerified()
         );
     }
 
@@ -175,7 +204,7 @@ public class AuthService {
     @Transactional
     public void verifyEmail(String email, String code) {
         User user = userRepository.findByEmailAndVerificationCode(email, code)
-            .orElseThrow(() -> new RuntimeException("验证码无效"));
+                .orElseThrow(() -> new RuntimeException("验证码无效"));
 
         // 检查验证码是否过期
         if (user.getVerificationCodeExpiry().isBefore(LocalDateTime.now())) {
@@ -195,7 +224,7 @@ public class AuthService {
     @Transactional
     public void resendVerificationEmail(String email) {
         User user = userRepository.findByEmail(email)
-            .orElseThrow(() -> new RuntimeException("邮箱不存在"));
+                .orElseThrow(() -> new RuntimeException("邮箱不存在"));
 
         if (user.getEmailVerified()) {
             throw new RuntimeException("邮箱已验证");
