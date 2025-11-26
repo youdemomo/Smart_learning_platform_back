@@ -1,0 +1,82 @@
+########################################
+# Maven
+########################################
+/target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+########################################
+# IntelliJ IDEA
+########################################
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+########################################
+# VS Code
+########################################
+.vscode/
+
+########################################
+# Java
+########################################
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+*.rar
+
+# JVM crash logs
+hs_err_pid*
+replay_pid*
+
+########################################
+# Spring Boot
+########################################
+# 本地日志
+/logs/
+/*/logs/
+
+# 临时文件
+*.pid
+*.tmp
+
+# 自定义环境配置（避免上传数据库密码）
+src/main/resources/application-*.yml
+!src/main/resources/application-example.yml
+.env
+*.env
+
+########################################
+# OS
+########################################
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+########################################
+# Others
+########################################
+/cache/
+/tmp/
