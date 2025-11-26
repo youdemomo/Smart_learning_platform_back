@@ -28,79 +28,191 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
-public class UserService {
+public PageResponse<UserDTO> getUserList(UserQueryRequest request) {
+        try {
+        // 参数校验
+        validateRequest(request);
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-
-    /**
-     * 分页查询用户列表
-     */
-    public PageResponse<UserDTO> getUserList(UserQueryRequest request) {
         // 构建查询条件
-        Specification<User> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
+        Specification<User> spec = buildSpecification(request);
 
-            // 用户名模糊查询
-            if (request.getUsername() != null && !request.getUsername().isEmpty()) {
-                predicates.add(cb.like(root.get("username"), "%" + request.getUsername() + "%"));
-            }
+        // 构建分页和排序
+        Pageable pageable = buildPageable(request);
 
-            // 邮箱模糊查询
-            if (request.getEmail() != null && !request.getEmail().isEmpty()) {
-                predicates.add(cb.like(root.get("email"), "%" + request.getEmail() + "%"));
-            }
-
-            // 机构名称模糊查询
-            if (request.getOrganization() != null && !request.getOrganization().isEmpty()) {
-                predicates.add(cb.like(root.get("organization"), "%" + request.getOrganization() + "%"));
-            }
-
-            // 角色精确查询
-            if (request.getRole() != null) {
-                predicates.add(cb.equal(root.get("role"), request.getRole()));
-            }
-
-            // 邮箱验证状态
-            if (request.getEmailVerified() != null) {
-                predicates.add(cb.equal(root.get("emailVerified"), request.getEmailVerified()));
-            }
-
-            // 启用状态
-            if (request.getEnabled() != null) {
-                predicates.add(cb.equal(root.get("enabled"), request.getEnabled()));
-            }
-
-            // 封禁状态
-            if (request.getBanned() != null) {
-                predicates.add(cb.equal(root.get("banned"), request.getBanned()));
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-
-        // 分页和排序
-        Pageable pageable = PageRequest.of(
-            request.getPage() - 1,
-            request.getSize(),
-            Sort.by(Sort.Direction.DESC, "createdAt")
-        );
-
+        // 执行查询
         Page<User> page = userRepository.findAll(spec, pageable);
 
         // 转换为DTO
-        List<UserDTO> userDTOs = page.getContent().stream()
-            .map(this::convertToDTO)
-            .collect(Collectors.toList());
+        List<UserDTO> userDTOs = convertToDTOList(page.getContent());
 
-        return new PageResponse<>(
-            userDTOs,
-            page.getTotalElements(),
-            request.getPage(),
-            request.getSize(),
-            page.getTotalPages()
+        // 构建响应
+        return buildPageResponse(userDTOs, page, request);
+
+        } catch (IllegalArgumentException e) {
+        log.warn("用户列表查询参数错误: {}", e.getMessage());
+        // 返回空结果而不是抛出异常
+        return buildEmptyResponse(request);
+        } catch (Exception e) {
+        log.error("用户列表查询失败: {}", e.getMessage(), e);
+        throw new RuntimeException("查询用户列表失败，请稍后重试", e);
+        }
+        }
+
+/**
+ * 验证请求参数
+ */
+private void validateRequest(UserQueryRequest request) {
+        if (request == null) {
+        throw new IllegalArgumentException("查询请求不能为空");
+        }
+
+        // 分页参数校验
+        if (request.getPage() == null || request.getPage() < 1) {
+        request.setPage(1);
+        }
+
+        if (request.getSize() == null || request.getSize() < 1) {
+        request.setSize(10);
+        }
+
+        // 限制最大分页大小，防止内存溢出
+        if (request.getSize() > 100) {
+        request.setSize(100);
+        }
+
+        // 字符串参数长度校验
+        validateStringLength(request.getUsername(), "用户名", 50);
+        validateStringLength(request.getEmail(), "邮箱", 100);
+        validateStringLength(request.getOrganization(), "机构名称", 100);
+        }
+
+/**
+ * 验证字符串长度
+ */
+private void validateStringLength(String value, String fieldName, int maxLength) {
+        if (value != null && value.length() > maxLength) {
+        throw new IllegalArgumentException(fieldName + "长度不能超过" + maxLength + "个字符");
+        }
+        }
+
+/**
+ * 构建查询条件
+ */
+private Specification<User> buildSpecification(UserQueryRequest request) {
+        return (root, query, cb) -> {
+        List<Predicate> predicates = new ArrayList<>();
+
+        // 用户名模糊查询（忽略大小写）
+        if (StringUtils.hasText(request.getUsername())) {
+        predicates.add(cb.like(
+        cb.lower(root.get("username")),
+        "%" + request.getUsername().toLowerCase() + "%"
+        ));
+        }
+
+        // 邮箱模糊查询（忽略大小写）
+        if (StringUtils.hasText(request.getEmail())) {
+        predicates.add(cb.like(
+        cb.lower(root.get("email")),
+        "%" + request.getEmail().toLowerCase() + "%"
+        ));
+        }
+
+        // 机构名称模糊查询（忽略大小写）
+        if (StringUtils.hasText(request.getOrganization())) {
+        predicates.add(cb.like(
+        cb.lower(root.get("organization")),
+        "%" + request.getOrganization().toLowerCase() + "%"
+        ));
+        }
+
+        // 角色精确查询
+        if (request.getRole() != null) {
+        predicates.add(cb.equal(root.get("role"), request.getRole()));
+        }
+
+        // 邮箱验证状态
+        if (request.getEmailVerified() != null) {
+        predicates.add(cb.equal(root.get("emailVerified"), request.getEmailVerified()));
+        }
+
+        // 启用状态
+        if (request.getEnabled() != null) {
+        predicates.add(cb.equal(root.get("enabled"), request.getEnabled()));
+        }
+
+        // 封禁状态
+        if (request.getBanned() != null) {
+        predicates.add(cb.equal(root.get("banned"), request.getBanned()));
+        }
+
+        // 如果没有查询条件，返回所有记录
+        if (predicates.isEmpty()) {
+        return cb.conjunction();
+        }
+
+        return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        }
+
+/**
+ * 构建分页和排序
+ */
+private Pageable buildPageable(UserQueryRequest request) {
+        // 默认按创建时间降序排列
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt");
+
+        // 可以在这里添加其他排序逻辑，例如：
+        // if (StringUtils.hasText(request.getSortBy())) {
+        //     sort = Sort.by(Sort.Direction.fromString(request.getSortOrder()), request.getSortBy());
+        // }
+
+        return PageRequest.of(
+        request.getPage() - 1, // Spring Data 页码从0开始
+        request.getSize(),
+        sort
         );
-    }
+        }
+
+/**
+ * 转换实体列表为DTO列表
+ */
+private List<UserDTO> convertToDTOList(List<User> users) {
+        if (users == null || users.isEmpty()) {
+        return Collections.emptyList();
+        }
+
+        return users.stream()
+        .filter(Objects::nonNull) // 过滤空对象
+        .map(this::convertToDTO)
+        .collect(Collectors.toList());
+        }
+
+/**
+ * 构建分页响应
+ */
+private PageResponse<UserDTO> buildPageResponse(List<UserDTO> userDTOs, Page<User> page, UserQueryRequest request) {
+        return new PageResponse<>(
+        userDTOs,
+        page.getTotalElements(),
+        request.getPage(),
+        request.getSize(),
+        page.getTotalPages()
+        );
+        }
+
+/**
+ * 构建空响应
+ */
+private PageResponse<UserDTO> buildEmptyResponse(UserQueryRequest request) {
+        return new PageResponse<>(
+        Collections.emptyList(),
+        0L,
+        request.getPage(),
+        request.getSize(),
+        0
+        );
+        }
 
     /**
      * 根据ID获取用户详情
