@@ -102,57 +102,53 @@ private Specification<User> buildSpecification(UserQueryRequest request) {
         return (root, query, cb) -> {
         List<Predicate> predicates = new ArrayList<>();
 
-        // 用户名模糊查询（忽略大小写）
-        if (StringUtils.hasText(request.getUsername())) {
-        predicates.add(cb.like(
-        cb.lower(root.get("username")),
-        "%" + request.getUsername().toLowerCase() + "%"
-        ));
-        }
+        // 字符串字段模糊查询（统一处理逻辑）
+        processStringFieldQuery(predicates, request.getUsername(), "username", root, cb);
+        processStringFieldQuery(predicates, request.getEmail(), "email", root, cb);
+        processStringFieldQuery(predicates, request.getOrganization(), "organization", root, cb);
 
-        // 邮箱模糊查询（忽略大小写）
-        if (StringUtils.hasText(request.getEmail())) {
-        predicates.add(cb.like(
-        cb.lower(root.get("email")),
-        "%" + request.getEmail().toLowerCase() + "%"
-        ));
-        }
+        // 枚举字段精确查询
+        processEnumFieldQuery(predicates, request.getRole(), "role", root, cb);
 
-        // 机构名称模糊查询（忽略大小写）
-        if (StringUtils.hasText(request.getOrganization())) {
-        predicates.add(cb.like(
-        cb.lower(root.get("organization")),
-        "%" + request.getOrganization().toLowerCase() + "%"
-        ));
-        }
+        // 布尔字段精确查询
+        processBooleanFieldQuery(predicates, request.getEmailVerified(), "emailVerified", root, cb);
+        processBooleanFieldQuery(predicates, request.getEnabled(), "enabled", root, cb);
+        processBooleanFieldQuery(predicates, request.getBanned(), "banned", root, cb);
 
-        // 角色精确查询
-        if (request.getRole() != null) {
-        predicates.add(cb.equal(root.get("role"), request.getRole()));
-        }
-
-        // 邮箱验证状态
-        if (request.getEmailVerified() != null) {
-        predicates.add(cb.equal(root.get("emailVerified"), request.getEmailVerified()));
-        }
-
-        // 启用状态
-        if (request.getEnabled() != null) {
-        predicates.add(cb.equal(root.get("enabled"), request.getEnabled()));
-        }
-
-        // 封禁状态
-        if (request.getBanned() != null) {
-        predicates.add(cb.equal(root.get("banned"), request.getBanned()));
-        }
-
-        // 如果没有查询条件，返回所有记录
-        if (predicates.isEmpty()) {
-        return cb.conjunction();
-        }
-
-        return cb.and(predicates.toArray(new Predicate[0]));
+        // 返回组合条件
+        return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
         };
+        }
+
+/**
+ * 处理字符串字段的模糊查询（忽略大小写）
+ */
+private void processStringFieldQuery(List<Predicate> predicates, String fieldValue, String fieldName,
+        Root<User> root, CriteriaBuilder cb) {
+        if (StringUtils.hasText(fieldValue)) {
+        String searchPattern = "%" + fieldValue.trim().toLowerCase() + "%";
+        predicates.add(cb.like(cb.lower(root.get(fieldName)), searchPattern));
+        }
+        }
+
+/**
+ * 处理枚举字段的精确查询
+ */
+private void processEnumFieldQuery(List<Predicate> predicates, Enum<?> fieldValue, String fieldName,
+        Root<User> root, CriteriaBuilder cb) {
+        if (fieldValue != null) {
+        predicates.add(cb.equal(root.get(fieldName), fieldValue));
+        }
+        }
+
+/**
+ * 处理布尔字段的精确查询
+ */
+private void processBooleanFieldQuery(List<Predicate> predicates, Boolean fieldValue, String fieldName,
+        Root<User> root, CriteriaBuilder cb) {
+        if (fieldValue != null) {
+        predicates.add(cb.equal(root.get(fieldName), fieldValue));
+        }
         }
 
 /**
